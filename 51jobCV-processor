@@ -1,0 +1,260 @@
+Sub main()
+
+config.config
+
+Dim arr() As String
+arr() = getFileName(2)                                                                    '取得文件名数组
+                                                                                          'loop数组内所有文件名称
+For i = 0 To UBound(arr)
+    s = Left(arr(i), 2)                                                                   '确认是否为前程无忧的简历（文件前缀为 51）
+    
+    If s = fileFlag Then
+        Workbooks.Open Filename:=rawPath & arr(i)                                         '打开Excel文件
+            
+        Dim wb As Workbook
+        Dim sh As Worksheet
+        Set wb = Workbooks(arr(i))
+        Set sh = wb.Worksheets(indexSheetName51)
+
+        validresult = validCheck51(wb, sh)                                                '确认简历有效性
+        
+        newFileFlag = 0
+        For j = UBound(validresult) To 0 Step -1
+                                                                                          '录入信息定义
+            Set shRecord = ThisWorkbook.Worksheets(recondShName)
+            If validresult(j) <> "" Then
+            
+                lastRow = shRecord.Cells(Rows.count, 1).End(xlUp).Row + 1
+                n = sh.Cells(j, findCol(sh, validCheckColName51(0)))
+                b = sh.Cells(j, findCol(sh, validCheckColName51(3)))
+                p = arr(i)
+                d = Now()
+                If validresult(j) = 1 Then
+                    okng = "OK"
+                    reason = "-"
+                    ElseIf validresult(j) <> "" Then
+                    okng = "NG"
+                    reason = validresult(j)
+                    End If
+
+                Call takeRecord(shRecord, lastRow, n, b, p, d, okng, reason)                  '录入确认信息
+                
+                
+                                                                                              '移动数据 新增工作簿(如有不符合) -> copy and paste
+                If validresult(j) <> 1 Then                                                   '确认结果不为空白或者1（确认OK）
+                    If newFileFlag = 0 Then                                                   '开新表格
+                        'Application.SheetsInNewWorkbook = 1
+                        Workbooks.Add(xlWBATWorksheet).Activate
+                        Set wbTemp = ActiveWorkbook
+                        Set shTemp = wbTemp.Sheets(1)
+                        newFileFlag = 1
+                        countTempRow = 1
+                        End If
+                                                                                              '移动数据 目录页
+                    sh.Cells(j, 1).EntireRow.Copy shTemp.Cells(countTempRow, 1)
+                    countTempRow = countTempRow + 1
+                    sh.Cells(j, 1).EntireRow.Delete
+                                                                                              '移动数据 简历
+                    wb.Sheets(j).Move after:=shTemp
+                    End If
+                    
+                End If
+            Next j
+        
+        tName = finishTag                                                                 '加入处理完成的前缀
+                                                                                          '另存简历(被筛/通过)
+        
+        a = Replace(arr(i), "xls", "xlsx")
+        
+        If newFileFlag = 1 Then
+            wbTemp.SaveAs Filename:=processPath & "条件不符合 " & a
+            Workbooks("条件不符合 " & a).Close savechanges = False
+            End If
+
+        Workbooks(arr(i)).SaveAs Filename:=processPath & tName & a, FileFormat:=xlOpenXMLWorkbook
+        Workbooks(tName & a).Close savechanges = False                                    '关闭打开的文件
+        End If
+        
+    Next
+
+
+End Sub
+
+Function validCheck51(wb As Workbook, sh As Worksheet)
+
+'姓名有效性、符合度、重复投递、毕业时间 的确认
+'input: wb:workbook of resume      sh:the contents sheet
+'return value: an array of result contains 1 (valid) or some strings (the reason of invalid) .
+
+config.config
+c1 = validCheckColName51(0)     '姓名（index内）            的列/行名称
+c2 = validCheckColName51(1)     '关联度
+c3 = validCheckColName51(2)     '简历编号
+c4 = validCheckColName51(3)     'Brithday
+r1 = validCheckRowName51(0)     '教育时间（简历内）
+
+nameCol = findCol(sh, c1)
+relevanceCol = findCol(sh, c2)
+noCol = findCol(sh, c3)
+bDayCol = findCol(sh, c4)
+
+er = wb.Sheets.count
+sc = 2
+
+Dim arr(51) As Variant
+Dim result(51) As Variant
+
+For r = 2 To er
+    Dim flag As String
+    flag = ""
+                                                                                
+                                                                                '是否重复的确认
+    If IsInArray(sh.Cells(r, noCol), arr) Then
+        flag = flag & "重复简历 "
+        End If
+    arr(r) = sh.Cells(r, noCol).Value
+                                                                                                                                                        '匹配度的确认
+    y = Left(sh.Cells(r, relevanceCol), 2)
+    y = Int(y) / 100
+    If y < 0.4 Then
+        flag = flag & "匹配度低于40% "
+        End If
+                                                                                
+                                                                                '名字是否包含英语、数字(正则表达确认)
+    n = Cells(r, nameCol)
+    flag = pureChineseCheck(n, flag)
+    flag = MsMrCheck(n, flag)
+    
+                                                                                '是否毕业
+    Set sh2 = wb.Worksheets(r)                                                  '定义简历的SHEET
+    eduRow = findRow(sh2, r1, 2)                                                '简历内搜索教育经历栏
+    flag = graduateCheck51(sh2, sc, eduRow, flag)
+
+                                                                                '在离职名单/供应商名单/黑名单/过往面试确认
+    bDay = sh.Cells(r, bDayCol)
+    flag = nameBdayCheck(ThisWorkbook, n, bDay, flag)
+    
+    
+    If flag = "" Then                                                           '简历确认结果加入数组result, flag = "" 符合要求为1, 不符合为不符合理由
+        result(r) = 1
+        Else
+        result(r) = flag
+        End If
+        
+    Next r
+                                                                                '返回result
+    validCheck51 = result()
+
+End Function
+
+Function nameBdayCheck(wb, n, bDay, flag As String)
+
+'姓名 - 出生日期 的确认
+'input:  [n] name of candidate, [bDay] brithday of candidate
+'        if the cell value of bDay is empty, only check the name is equal or not.
+'output: flag + flag(if any)
+
+config.config
+
+For i = 0 To UBound(nbChecklistName)
+    Set sh = wb.Worksheets(nbChecklistName(i))
+    r = 2
+    
+    Do Until sh.Cells(r, 1) = ""
+        cell1 = sh.Cells(r, nbCheckRow(0))
+        If cell1 = n Then
+            cell2 = sh.Cells(r, nbCheckRow(1))
+            
+            If cell2 <> "" Then
+                cell2 = Year(cell2) & "-" & Month(cell2)
+                End If
+            
+            bDay = Year(bDay) & "-" & Month(bDay)
+            If cell2 = bDay Or cell2 = "" Then
+                flag = flag & sh.Name & " "
+                End If
+            
+            End If
+        r = r + 1
+        Loop
+        
+    Next i
+
+nameBdayCheck = flag
+
+End Function
+
+Function MsMrCheck(temp, flag)
+
+s = Right(temp, 2)
+If s = "小姐" Or s = "先生" Then
+    flag = flag & "先生小姐 "
+    End If
+
+s = Left(temp, 1)
+If s = "小" And Len(temp) = 2 Then
+    flag = flag & "小x "
+    End If
+
+MsMrCheck = flag
+
+End Function
+
+Function pureChineseCheck(temp, flag)
+
+Set reg = CreateObject("vbscript.regexp")
+With reg
+    .Global = ue
+    .ignorecase = True
+    .Pattern = "[a-zA-Z0-9]+"
+    End With
+
+If reg.test(temp) Then
+    flag = flag & "名字含英语、数字"
+    End If
+
+pureChineseCheck = flag
+
+End Function
+
+Function graduateCheck51(sh2, sc, eduRow, flag)
+
+
+temp = Left(sh2.Cells(eduRow + 1, sc + 1), 15)                              '教育经历栏offset,取值
+temp = Right(temp, 7)                                                       '取值
+
+If Left(temp, 1) = "今" Then
+    flag = flag & "未毕业"
+    graduateCheck51 = flag
+    Exit Function
+    End If
+
+m = Int(Right(temp, 2))                                                     '取月份
+y = Int(Left(temp, 4))                                                      '取年份
+currentY = Year(Now())
+currentM = Month(Now())
+    
+If currentY = y Then                                                        '比较
+    If currentM <= m Then
+        flag = flag & "未毕业"
+        End If
+    End If
+
+If currentY < y Then                                                        '比较
+    flag = flag & "未毕业"
+    End If
+
+graduateCheck51 = flag
+
+End Function
+
+Private Sub takeRecord(sh, r, n, b, p, d, okng, reason)
+
+sh.Cells(r, 1) = n
+sh.Cells(r, 2) = b
+sh.Cells(r, 3) = p
+sh.Cells(r, 4) = d
+sh.Cells(r, 5) = okng
+sh.Cells(r, 6) = reason
+
+End Sub
