@@ -1,0 +1,49 @@
+Sub main()
+
+Set sh1 = ThisWorkbook.Sheets("Sheet1")
+
+'Enter Start Column in c ,Enter Start Row in r
+c = 1
+r = 2
+
+Do Until sh1.Cells(r, c + 1) = ""
+    Call Send_Automatic_Email_From_Excel(sh1.Cells(r, c), sh1.Cells(r, c + 1), _
+    sh1.Cells(r, c + 2), sh1.Cells(r, c + 3))
+    r = r + 1
+    Loop
+    
+
+End Sub
+
+Sub Send_Automatic_Email_From_Excel(ToAddr As String, ToSubj As String, ToMsg As String, Att As String)
+
+    'Click Tools -> References -> Microsoft Outlook nn.n Object Library
+    Dim oExcelEmailApp As Object
+    Set oExcelEmailApp = Outlook.Application.CreateItem(0)
+    
+    'VBA Create email
+    With oExcelEmailApp
+        .To = ""
+        .CC = ToAddr
+        .BCC = ""
+        .Subject = ToSubj
+        .Body = ToMsg
+        
+        On Error Resume Next
+        
+        If Att <> "" Then
+        a = Split(Att, Chr(10))
+        b = UBound(a)
+        
+        For i = 0 To b
+        .Attachments.Add ThisWorkbook.Path & "\" & a(i)
+            Next
+            
+            End If
+        
+        .Display 'to send automatic mail from excel instead of .display use .send
+    End With
+    
+    Set oExcelEmailApp = Nothing
+End Sub
+
