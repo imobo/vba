@@ -1,0 +1,272 @@
+Sub a()
+'------------------------------ 变量定义 ------------------------------
+Dim ws1Name As String
+Dim wbName As String
+Dim ws2Name As String
+Dim newName As String
+Dim ws3Name As String
+
+Dim sr1 As Integer
+Dim sc1 As Integer
+Dim ec1 As Integer
+Dim sr2 As Integer
+Dim tarCol As Variant
+Dim pw As String
+Dim ptn As String
+
+Dim wb As Workbook
+Dim ws1 As Worksheet
+Dim ws2 As Worksheet
+Dim ws3 As Worksheet
+
+Dim arr2 As Variant
+
+Dim r1 As Integer
+Dim r2 As Integer
+Dim temp As String
+
+Dim cntCol As Variant
+Dim cnt As Integer
+
+Dim blueCol As Variant
+Dim sBlueCol As Integer
+Dim eBlueCol As Integer
+'------------------------------ 参数设置 ------------------------------
+
+ws3Name = "参数设置"
+Set ws3 = ThisWorkbook.Sheets(ws3Name)   '参数页
+
+ws1Name = ws3.Cells(2, 2)
+wbName = ws3.Cells(3, 2)                 '模板
+ws2Name = ws3.Cells(4, 2)
+newName = ws3.Cells(5, 2)
+
+sr1 = ws3.Cells(7, 2)
+sc1 = ws3.Cells(8, 2)
+ec1 = ws3.Cells(9, 2)
+sr2 = ws3.Cells(10, 2)
+tarCol = ws3.Cells(11, 2)                '分表依据列
+pw = ws3.Cells(12, 2)                    '密码
+ptn = ws3.Cells(14, 2)                   '模式
+
+cntCol = ws3.Cells(16, 2)
+blueCol = ws3.Cells(17, 2)
+'------------------------------ 文件设置 ------------------------------
+
+p = ThisWorkbook.Path
+Workbooks.Open Filename:=p & "\" & wbName
+
+Set ws1 = ThisWorkbook.Sheets(ws1Name)
+Set wb = Workbooks(wbName)
+Set ws2 = wb.Sheets(ws2Name)
+
+'------------------------------ loooooop ------------------------------
+
+arr2 = Split(tarCol, ",")                                          '取得分表依据的指定列数
+arr1 = getAllKey(ws1, arr2, sr1)
+
+For i = 0 To UBound(arr1)                                          'loop every key
+    r1 = sr1                                                       'reset start row
+    r2 = sr2
+    cnt = 0
+    arr1(i) = replaceInvaildStr(arr1(i))
+    
+    Do Until ws1.Cells(r1, sc1) = ""                               'loop ws1
+        key = replaceInvaildStr(getKeyFormCol(ws1, r1, arr2))      'get key form ws1 row
+        If key = arr1(i) Then                                      'have the same key
+            cnt = cnt + 1
+            For j = sc1 To ec1                                     'copy data
+                ws2.Cells(r2, j).Value = ws1.Cells(r1, j).Value
+                If cntCol <> "" Then                               'if No. column is specificed
+                    ws2.Cells(r2, cntCol).Value = cnt              'add No.
+                    End If
+                Next j
+            r2 = r2 + 1
+            End If
+        r1 = r1 + 1
+        Loop
+
+    
+
+    If ws2.Cells(sr2, sc1) <> 0 Then                                           'if not empty
+        temp = "(" & arr1(i) & ")" & newName & ".xlsx"                         'New file name
+        Call SetLineFormatAll(ws2, sr2, r2 - 1, sc1, ec1, vbBlack)             'Set format
+        
+        If blueCol <> "" Then
+            blueColCotent = Split(blueCol, ",")
+            If UBound(blueColCotent) > 0 Then
+                sBlueCol = blueColCotent(0)
+                eBlueCol = blueColCotent(1)
+            Else
+                sBlueCol = blueCol
+                eBlueCol = blueCol
+                End If
+            Call SetLineFormat4(ws2, sr2, r2 - 1, sBlueCol, eBlueCol, vbBlue)
+            End If
+        
+        If ptn = "分表" Or ptn = "打印+分表" Then
+            If pw = "" Then
+                wb.SaveAs Filename:=p & "\" & temp                             'save
+                Else
+                wb.SaveAs Filename:=p & "\" & temp, Password:=pw               'save with password
+                End If
+            End If
+            
+        If ptn = "打印" Or ptn = "打印+分表" Then
+            With ws2.PageSetup
+                colLetter = Split(Cells(1, ec1).Address, "$")(1)
+                .PrintArea = "$A$1:$" & colLetter & "$" & r2 - 1
+                .FitToPagesWide = 1
+                '.FitToPagesTall = False
+                End With
+            ws2.PrintOut                                                       'print
+            End If
+                
+        ws2.Range(ws2.Cells(sr2, sc1), ws2.Cells(r2, ec1)).EntireRow.Delete    'reset range
+        End If
+    Next i
+
+Workbooks(temp).Close savechanges:=False                                     'close
+
+End Sub
+Function getAllKey(ws1 As Worksheet, arr2 As Variant, sr1 As Integer) As Variant
+
+Dim x As Integer
+Dim y As Integer
+Dim z As Integer
+Dim tempInt As Integer
+
+tempInt = UBound(arr2)                                             '取得作为【分表依据】的数组 get array of key
+
+If tempInt = 2 Then                                                '根据【分表依据】的参数数量设定arr1
+    x = Int(arr2(0))
+    y = Int(arr2(1))
+    z = Int(arr2(2))
+    arr1 = getArr(ws1, sr1, x, y, z)
+ElseIf tempInt = 1 Then
+    x = Int(arr2(0))
+    y = Int(arr2(1))
+    arr1 = getArr(ws1, sr1, x, y)
+ElseIf tempInt = 0 Then
+    x = Int(arr2(0))
+    arr1 = getArr(ws1, sr1, x)
+Else
+    MsgBox "分表依据行填写有误"                                     '参数多于3个
+    Exit Function
+    End If
+
+getAllKey = arr1
+
+End Function
+
+Function getKeyFormCol(sh As Worksheet, r As Integer, cArr As Variant) As String
+
+'#######################################################
+'输入：  r = 对象行    cArr = 包含需要加入key的列数的数组
+'输出：  以";"分隔的对象行、列的值（string）
+'#######################################################
+
+Dim key As String
+key = ""
+
+For k = 0 To UBound(cArr)                                  '0 to ubound(arr2) 参数个数
+    If k = UBound(cArr) Then                               '是最后一个参数
+        key = key & sh.Cells(r, Int(cArr(k)))              '加到key里面
+        Else                                               '非最后一个参数
+        key = key & sh.Cells(r, Int(cArr(k))) & ";"
+        End If
+    Next k
+
+getKeyFormCol = key
+
+End Function
+
+Function getArr(sh As Worksheet, sr As Integer, c As Integer, Optional c2 As Integer, Optional c3 As Integer) As Variant
+
+'#######################################################
+'输入：  sr = 起始行    c = 列
+'输出：  列1;列2 的值不重复组合 的数组
+'注意：  列1数据中间不能空白值
+'#######################################################
+
+
+Dim str() As String
+Count = 0
+r = sr
+
+Do Until sh.Cells(r, c) = ""
+    If c3 > 0 Then
+        d = sh.Cells(r, c).Value & ";" & sh.Cells(r, c2).Value & ";" & sh.Cells(r, c3).Value
+        Else
+        If c2 > 0 Then
+            d = sh.Cells(r, c).Value & ";" & sh.Cells(r, c2).Value
+            Else
+            d = sh.Cells(r, c).Value
+            End If
+        End If
+    
+    ReDim Preserve str(Count)
+    
+    On Error Resume Next
+    If Application.Match(d, str, 0) = 0 Then
+        str(Count) = d
+        Count = Count + 1
+        End If
+
+    r = r + 1
+    Loop
+
+    getArr = str
+
+End Function
+
+Sub SetLineFormatAll(sh4 As Worksheet, sr As Integer, er As Integer, sc As Integer, ec As Integer, colour As String)
+    
+    With sh4.Range(sh4.Cells(sr, sc), sh4.Cells(er, ec)).Borders
+        .LineStyle = xlcontinous
+        .Weight = xlThin
+        .Color = colour
+        End With
+        
+        'vbBlack vbBlue vbRed
+        
+End Sub
+
+Sub SetLineFormat4(sh4, sr, er, sc, ec, colour)
+    With sh4.Range(sh4.Cells(sr, sc), sh4.Cells(er, ec)).Borders(xlEdgeTop)
+        .LineStyle = xlcontinous
+        .Weight = xlMedium
+        .Color = colour
+        End With
+    With sh4.Range(sh4.Cells(sr, sc), sh4.Cells(er, ec)).Borders(xlEdgeBottom)
+        .LineStyle = xlcontinous
+        .Weight = xlMedium
+        .Color = colour
+        End With
+    With sh4.Range(sh4.Cells(sr, sc), sh4.Cells(er, ec)).Borders(xlEdgeLeft)
+        .LineStyle = xlcontinous
+        .Weight = xlMedium
+        .Color = colour
+        End With
+    With sh4.Range(sh4.Cells(sr, sc), sh4.Cells(er, ec)).Borders(xlEdgeRight)
+        .LineStyle = xlcontinous
+        .Weight = xlMedium
+        .Color = colour
+        End With
+
+'sh5.Range(sh5.Cells(7, 1), sh5.Cells(k - 1, 15)).Copy
+'sh5.Range(sh5.Cells(7, 1), sh5.Cells(k - 1, 15)).PasteSpecial Paste:=xlPasteValues
+
+End Sub
+
+Function replaceInvaildStr(s As Variant) As String
+
+invaildStr = Array("/", "\", Chr(9), Chr(10), Chr(13))
+
+For i = 0 To UBound(invaildStr)
+    s = Replace(s, invaildStr(i), "")
+    Next
+
+replaceInvaildStr = s
+
+End Function
