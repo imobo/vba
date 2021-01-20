@@ -1,0 +1,132 @@
+Public rawPath As String
+Public processPath As String
+Public selectPath As String
+Public fileFlag As String
+Public indexSheetName51 As String
+Public validCheckColName51() As Variant
+Public validCheckRowName51() As Variant
+
+Public recondShName As String
+Public recondShNameManual As String
+
+Public finishTag As String
+Public nbChecklistName() As Variant
+Public nbCheckRow() As Variant
+
+Public tagRow As Integer
+Public tagCol As Integer
+Public problemColour As Double
+Public hyperCol() As Variant
+
+Public divs() As Variant
+Public depts() As Variant
+Public allranks() As Variant
+Public ranks() As Variant
+
+
+Sub config()
+
+p = ThisWorkbook.Path
+rawPath = p & "\1.rawCV\"                           '原始简历保存目录
+processPath = p & "\2.processedCV\"                 '修改后简历保存目录
+selectPath = p & "\3.selectedCV\"                   '部门筛选简历
+
+fileFlag = "51"                                     '51简历的文件开头（限定2位）
+
+indexSheetName51 = "UserList"                                           '索引页名称
+validCheckColName51 = Array("姓名", "匹配度", "简历编号", "出生日期")   '索引页确认的列的名称
+validCheckRowName51 = Array("教育经历")                                 '简历内确认的行的名称
+
+recondShName = "logAuto"
+recondShNameManual = "logManual"
+
+finishTag = "已自动筛选 "                                                           '筛选后简历追加的文件头（tag）
+nbChecklistName = Array("backlist1", "blacklist2")                                  'name and bday check datalist name
+nbCheckRow = Array(1, 2)                                                            'first elem is the column number for names in the above list, second elem for bDay
+
+tagRow = 2                                                                          '○×的数据开始行/列
+tagCol = 2
+
+problemColour = 65535                                                               '人事筛选时有问题部分的颜色,录入log用
+
+hyperCol = Array(1, 1, 1)                                                           '[0]INDEX页中设置超链接的列，[1,2]CV中返回按钮的行/列
+
+
+'--------------------------------------------------------------------------------------------- 部门
+
+divs = Array("aDiv", "bDiv")
+
+depts = Array("aDept", "bDept")
+
+
+'--------------------------------------------------------------------------------------------- 工资等级
+
+allranks = Array("manager", "supervisor", "staff")
+ranks = Array("manager", "supervisor", "staff")
+
+End Sub
+
+Public Function interiorColor(CellColor As Range)
+
+Application.Volatile
+interiorColor = CellColor.Interior.Color
+
+End Function
+
+Public Function getFileName(inp As Integer)
+
+Dim f As String
+Dim count As Integer
+Dim arr() As String
+
+If inp = 0 Then
+    f = Dir(processPath & "*.xlsx")
+    ElseIf inp = 1 Then
+    f = Dir(selectPath & "*.xlsx")
+    ElseIf inp = 2 Then
+    f = Dir(rawPath & "*.xls")
+    End If
+    
+count = 0
+ReDim Preserve arr(count)
+arr(count) = f
+
+Do While f <> ""
+    f = Dir                                         '第二次读入的时候不用写参数
+    If f = "" Then                                  '数组中空白值不打开
+        Exit Do
+        End If
+    
+    count = count + 1
+    ReDim Preserve arr(count)
+    arr(count) = f
+    Loop
+
+getFileName = arr()
+
+End Function
+
+Public Function findCol(sh, colName As Variant, Optional j As Integer = 1)
+
+i = 1
+Do Until sh.Cells(j, i) = colName
+    i = i + 1
+    Loop
+    findCol = i
+
+End Function
+Public Function findRow(sh, rowName As Variant, Optional j As Integer = 1)
+
+i = 1
+Do Until sh.Cells(i, j) = rowName
+    i = i + 1
+    Loop
+    findRow = i
+
+End Function
+
+Public Function IsInArray(stringToBeFound As String, arr As Variant) As Boolean
+
+  IsInArray = (UBound(Filter(arr, stringToBeFound)) > -1)
+
+End Function
